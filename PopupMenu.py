@@ -25,10 +25,12 @@ from Highlight.Highlight import MouseoverHighlight
 ###     Author:  Chad Unterschultz
 ###
 ###     V 1.0.0    Feb 13, 2021
+###     V 1.0.1    Feb 27, 2021   Added a counter to ensure multiple popup menues aren't
+###                               all created for the same single click.
 
 
 debugging = False
-VERSION     = (1,0,0)
+VERSION     = (1,0,1)
 VERSION_s   = "%s.%s.%s" %VERSION
 
 
@@ -153,13 +155,13 @@ class PopupMenu:
     Canvas_Items = ["arc", "bitmap", "image", "line", "oval", "polygon",
                     "rectangle", "text", "window"]
 
-    def __init__(self, Widget, Root, Canvas_, Menu_ ):
+    def __init__(self, Widget, Root, Canvas_, Menu_, Manager = None):
         '''  Tie the Popup Menu behavior to the widget that has been inputted  '''
-        self.config_check( Widget, Root, Canvas_, Menu_)
+        self.config_check( Widget, Root, Canvas_, Menu_, Manager)
         self.canvas_setup()
 
 
-    def config_check(self, Widget, Root, Canvas_, Menu_ ):
+    def config_check(self, Widget, Root, Canvas_, Menu_, Manager ):
         ''' Check that the variables are all valid types '''
 
         if ( (Root.__class__.__name__ != Tk.__name__) &                        # Is the Root a tkinter Window or Frame?
@@ -183,24 +185,97 @@ class PopupMenu:
         else:
             self.Menu = Menu_
 
+        self.Manager = Manager
+
+        self.check_time = 500
+
+
 
 
 
     def canvas_setup(self):
-        self.Canvas.tag_bind(self.Widget, '<Enter>', self.createPopUp, add = '+') #Menu can only be shown upon mousover
-        self.Canvas.tag_bind(self.Widget, '<Leave>', self.deletePopUp, add = '+') #Menu hidden
+        self.Canvas.tag_bind(self.Widget, '<Enter>', self.allowPopUp, add = '+') #Menu can only be shown upon mousover
+        self.Canvas.tag_bind(self.Widget, '<Leave>', self.preventPopUp, add = '+') #Menu hidden
 
 
-    def createPopUp(self, event = None):
+    def allowPopUp(self, event = None):
+
         self.Canvas.bind('<Button-3>', self.showmenu, add = '+')               # Right Click to Show
+        self.PopUpPresent = None
 
-    def deletePopUp(self, event = None):
+    def preventPopUp(self, event = None):
+
+
         self.Canvas.unbind('<Button-3>')                                       #A way of unbinding only a single handler?
+        self.Menu.unpost()
+        self.PopUpPresent = None
+
+        #if "showmenu_check_handler" in self.__dict__.keys():
+        #    if self.showmenu_check_handler != None:
+        #       self.Root.after_cancel(self.showmenu_check_handler)
+        #       del self.showmenu_check_handler
+        #    self.showmenu_check_handler = None
+
 
 
     def showmenu(self, event):
         if debugging == True: print("Pop up Menu")
-        self.Menu.post(event.x_root, event.y_root)                             #Display PopupMenu at button click location
+        #if self.Manager != None:
+        #    self.Manager.PopupMenu_update(event)
+        #    if debugging == True: print("Passed Event position X: ", event.x)
+        if self.PopUpPresent == None:                                          # Only Allow one Popup At a Time
+            self.Menu.post(event.x_root, event.y_root)                             #Display PopupMenu at button click locations
+            self.PopUpPresent = 1
+
+        #self.showmenu_check_handler  = self.Root.after(self.check_time, self.showmenu_check)
+
+
+
+    def showmenu_check(self):
+        ''' Leaving the Text Widget Region Eliminates the ability to cause a Popup .
+        Ended up not being necessary     '''
+
+        buffer_distance = 25 #number of pixels you can be near something and still count as on it
+
+        canvas_X = self.Canvas.winfo_rootx() #Canvas Top Left Absolute Position
+        canvas_Y = self.Canvas.winfo_rooty() #Canvas Top Left Absolute Position
+
+        mouse_X = self.Canvas.winfo_pointerx()
+        mouse_Y = self.Canvas.winfo_pointery()
+
+        position = self.Canvas.bbox(self.Widget)
+
+        mouse_X = mouse_X - canvas_X
+        mouse_Y = mouse_Y - canvas_Y
+
+        widget_minX = position[0] - buffer_distance
+        widget_maxX = position[2] + buffer_distance
+
+        widget_minY = position[1] - buffer_distance
+        widget_maxY = position[3] + buffer_distance
+
+        menu_X = self.Menu.winfo_rootx()
+        menu_Y = self.Menu.winfo_rooty()
+
+        menu_Width = self.Menu.winfo_width()
+        menu_Height = self.Menu.winfo_height()
+
+        menu_minX = menu_X - buffer_distance
+        menu_maxX = menu_X + menu_Width + buffer_distance
+
+        menu_minY = menu_Y - buffer_distance
+        menu_maxY = menu_Y + menu_Height + buffer_distance
+
+
+
+
+        if ( ( (widget_minX <= mouse_X <= widget_maxX) & (widget_minY <= mouse_Y <= widget_maxY) ) |
+            ( (menu_minX <= mouse_X <= menu_maxX) & (menu_minY <= mouse_Y <= menu_maxY) ) ):
+            if self.showmenu_check_handler == None: #check not already scheduled for sometime in the future
+                self.showmenu_check_handler = self.Root.after(self.check_time, self.showmenu_check)
+
+            else:
+                self.deletePopUp()
 
 
 
