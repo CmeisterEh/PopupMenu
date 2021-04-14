@@ -29,7 +29,7 @@ from Highlight.Highlight import MouseoverHighlight
 ###                               all created for the same single click.
 
 
-debugging = False
+debugging = True
 VERSION     = (1,0,1)
 VERSION_s   = "%s.%s.%s" %VERSION
 
@@ -37,11 +37,12 @@ VERSION_s   = "%s.%s.%s" %VERSION
 
 class PopupMenu:
     """ Class PopupMenu
-        Usage: MouseoverHighlight(<widget>, <window>, <canvas>, <menu>)
+        Usage: MouseoverHighlight(<widget>, <window>, <canvas>, <menu>, <window>)
         <widget>         = required, widget you are trying to enclose or highlight
         <window>         = required, the window within which the widget lives
         <canvas>         = required, the canvas within which the widget lives
         <menu>           = required, the menu you want to popup
+        <window>         = optional, is this a window in canvas?
     """
 
     COLOURS  = ['black', 'snow', 'ghost white', 'white smoke', 'gainsboro',
@@ -155,13 +156,14 @@ class PopupMenu:
     Canvas_Items = ["arc", "bitmap", "image", "line", "oval", "polygon",
                     "rectangle", "text", "window"]
 
-    def __init__(self, Widget, Root, Canvas_, Menu_, Manager = None):
+    def __init__(self, Widget, Root, Canvas_, Menu_, Manager = None, window = False):
         '''  Tie the Popup Menu behavior to the widget that has been inputted  '''
-        self.config_check( Widget, Root, Canvas_, Menu_, Manager)
+
+        self.config_check( Widget, Root, Canvas_, Menu_, Manager, window)
         self.canvas_setup()
 
 
-    def config_check(self, Widget, Root, Canvas_, Menu_, Manager ):
+    def config_check(self, Widget, Root, Canvas_, Menu_, Manager, window ):
         ''' Check that the variables are all valid types '''
 
         if ( (Root.__class__.__name__ != Tk.__name__) &                        # Is the Root a tkinter Window or Frame?
@@ -170,15 +172,21 @@ class PopupMenu:
         else:
             self.Root = Root
 
+
         if (Canvas_.__class__.__name__ != Canvas.__name__) :                   # Is the Canvas a tkiner Canvas?
             raise TypeError ("<Canvas_> must be a Canvas Widget")
         else:
             self.Canvas = Canvas_
 
-        if self.Canvas.type(Widget) not in PopupMenu.Canvas_Items:             # Is the Widget part of the Canvas?
-            raise TypeError ("<Widget> must be a Canvas Widget")
+
+        if window == False:
+            if self.Canvas.type(Widget) not in PopupMenu.Canvas_Items:             # Is the Widget part of the Canvas?
+                raise TypeError ("<Widget> must be a Canvas Widget")
+            else:
+                self.Widget = Widget
         else:
             self.Widget = Widget
+
 
         if (( Menu_.__class__.__name__ != Menu.__name__)):                     # Is the Menu a Tkinter Dropdown Menu?
             raise TypeError ("<menu> must be a tkinter menu")
@@ -186,27 +194,37 @@ class PopupMenu:
             self.Menu = Menu_
 
         self.Manager = Manager
-
         self.check_time = 500
-
-
-
-
+        self.Window = window
 
     def canvas_setup(self):
-        self.Canvas.tag_bind(self.Widget, '<Enter>', self.allowPopUp, add = '+') #Menu can only be shown upon mousover
-        self.Canvas.tag_bind(self.Widget, '<Leave>', self.preventPopUp, add = '+') #Menu hidden
+
+        if self.Window == True:
+            print("bound")
+            self.Widget.bind("<Enter>", self.allowPopUp, add = '+')   #   If mouse enters widget area
+            self.Widget.bind("<Leave>", self.preventPopUp, add = '+')   #   If mouse leaves widget area
+
+        else:
+            self.Canvas.tag_bind(self.Widget, '<Enter>', self.allowPopUp, add = '+') #Menu can only be shown upon mousover
+            self.Canvas.tag_bind(self.Widget, '<Leave>', self.preventPopUp, add = '+') #Menu hidden
 
 
     def allowPopUp(self, event = None):
 
-        self.Canvas.bind('<Button-3>', self.showmenu, add = '+')               # Right Click to Show
+        if self.Window == True:
+            self.Widget.bind("<Button-3>", self.showmenu, add = '+')
+        else:
+            self.Canvas.bind('<Button-3>', self.showmenu, add = '+')               # Right Click to Show
+
         self.PopUpPresent = None
 
     def preventPopUp(self, event = None):
 
+        if self.Window == True:
+            self.Widget.unbind("<Button-3>")
+        else:
+            self.Canvas.unbind('<Button-3>')                                       #A way of unbinding only a single handler?
 
-        self.Canvas.unbind('<Button-3>')                                       #A way of unbinding only a single handler?
         self.Menu.unpost()
         self.PopUpPresent = None
 
@@ -240,10 +258,27 @@ class PopupMenu:
         canvas_X = self.Canvas.winfo_rootx() #Canvas Top Left Absolute Position
         canvas_Y = self.Canvas.winfo_rooty() #Canvas Top Left Absolute Position
 
-        mouse_X = self.Canvas.winfo_pointerx()
+        mouse_X = self.Canvas.winfo_pointerx() #Mouse Absolute Position
         mouse_Y = self.Canvas.winfo_pointery()
 
-        position = self.Canvas.bbox(self.Widget)
+        if self.Window == True:
+
+            Xpos = self.Widget.winfo_rootx()                               # Widget absolute Position
+            Ypos = self.Widget.winfo_rooty()
+
+            width = self.Widget.winfo_width()                              #Widget Width and Height (in pixels)
+            height = self.Widget.winfo_height()
+
+            canvas_x = self.Canvas.winfo_rootx()                           # Canvas Top Left Absolute Position
+            canvas_y = self.Canvas.winfo_rooty()
+
+            Xmin = Xpos - canvas_x                                         # Relative Position of Anchor
+            Ymin = Ypos - canvas_y
+            Xmax = Xmin + width
+            Ymax = Ymin + height
+            position = (Xmin, Ymin, Xmax, Ymax)
+        else:
+            position = self.Canvas.bbox(self.Widget)
 
         mouse_X = mouse_X - canvas_X
         mouse_Y = mouse_Y - canvas_Y
@@ -265,9 +300,6 @@ class PopupMenu:
 
         menu_minY = menu_Y - buffer_distance
         menu_maxY = menu_Y + menu_Height + buffer_distance
-
-
-
 
         if ( ( (widget_minX <= mouse_X <= widget_maxX) & (widget_minY <= mouse_Y <= widget_maxY) ) |
             ( (menu_minX <= mouse_X <= menu_maxX) & (menu_minY <= mouse_Y <= menu_maxY) ) ):
